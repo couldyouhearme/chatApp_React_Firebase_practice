@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import './App.css';
 
 // firebase SDK
@@ -11,7 +11,7 @@ import { initializeApp } from "firebase/app";
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { useCollectionData } from 'react-firebase-hooks/firestore';
 import { getFirestore, query, orderBy, limit } from "firebase/firestore";
-import { collection } from "firebase/firestore";
+import { collection, addDoc } from "firebase/firestore";
 
 // Initialize Firebase
 const firebaseConfig = {
@@ -27,9 +27,9 @@ const firebaseConfig = {
 const app = firebase.initializeApp(firebaseConfig)
 
 // Initialize Cloud Firestore and get a reference to the service
-const db = getFirestore(app);
+const db = getFirestore(app)
 
-const auth = firebase.auth()
+const auth = firebase.auth() // bug here
 const firestore = firebase.firestore()
 
 function App() {
@@ -41,10 +41,10 @@ function App() {
         {user ? <ChatRoom /> : <SignIn />}
       </section>
     </div>
-  );
+  )
 }
 
-export default App;
+export default App
 
 const SignIn = () => {
   const signInWithGoogle = () => {
@@ -67,32 +67,64 @@ const SignOut = () => {
 
 const ChatRoom = () => {
 
+  const dummy = useRef()
+
   //const messagesRef = firestore.collection('messages')
   const messagesRef = collection(db, "messages")
   //const query = messagesRef.orderBy('createdAt').limit(25)
   const q = query(messagesRef, orderBy("createdAt"), limit(25))
 
   const [messages, loadingMessages, error] = useCollectionData(q, { idField: "id" })
-  console.log('messages:', messages)
-  console.log('error:', error)
+
+  const [formValue, setFormValue] = useState('')
+
+  const sendMessage = async e => {
+    e.preventDefault()
+
+    const { uid, photoURL } = auth.currentUser
+
+    await addDoc(messagesRef, {
+      text: formValue,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      uid,
+      photoURL
+    })
+
+    setFormValue('')
+
+    dummy.current.scrollIntoView({ behavior: 'smooth' })
+  }
 
   return (
     <>
-      <div>chatroom</div>
-      <div>
-        {messages && messages.map(msg => {
-          <ChatMessage key={msg.id} message={msg} />
-        })}
-      </div>
+      <main>
+        {
+          messages && messages.map(message => // bug: no id!
+            < ChatMessage key={message.id} message={message} />
+          )
+        }
+        <div ref={dummy}></div>
+      </main>
+      <form onSubmit={sendMessage}>
+        <input value={formValue} onChange={e => setFormValue(e.target.value)} />
+        <button type='submit'>submit</button>
+      </form>
     </>
 
   )
 }
 
-const ChatMessage = ({ message }) => {
-  const { text, uid } = message
+const ChatMessage = ({ key, message }) => {
+  const { text, uid, photoURL } = message
+
+  const messageClass = uid === auth.currentUser.uid ? 'sent' : 'received'
+
+  const defaultImage = require('./assets/favicon.ico')
 
   return (
-    <p>{text}</p>
+    <div className={`message ${messageClass}`}>
+      <img src={photoURL || defaultImage} />
+      <p>{text}</p>
+    </div>
   )
 }
